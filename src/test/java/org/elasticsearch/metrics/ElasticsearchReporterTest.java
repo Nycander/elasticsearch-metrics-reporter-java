@@ -18,7 +18,20 @@
  */
 package org.elasticsearch.metrics;
 
-import com.codahale.metrics.*;
+import static com.codahale.metrics.MetricRegistry.name;
+import static org.elasticsearch.common.settings.ImmutableSettings.settingsBuilder;
+import static org.hamcrest.CoreMatchers.instanceOf;
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.notNullValue;
+import static org.hamcrest.Matchers.hasKey;
+import static org.hamcrest.Matchers.hasSize;
+
+import java.io.IOException;
+import java.util.Calendar;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.admin.cluster.node.stats.NodeStats;
 import org.elasticsearch.action.admin.cluster.node.stats.NodesStatsResponse;
@@ -41,17 +54,14 @@ import org.elasticsearch.test.ElasticsearchIntegrationTest;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.IOException;
-import java.util.Calendar;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-
-import static com.codahale.metrics.MetricRegistry.name;
-import static org.elasticsearch.common.settings.ImmutableSettings.settingsBuilder;
-import static org.hamcrest.CoreMatchers.*;
-import static org.hamcrest.Matchers.hasKey;
-import static org.hamcrest.Matchers.hasSize;
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.Metric;
+import com.codahale.metrics.MetricFilter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 
 public class ElasticsearchReporterTest extends ElasticsearchIntegrationTest {
 
@@ -227,6 +237,26 @@ public class ElasticsearchReporterTest extends ElasticsearchIntegrationTest {
         assertKey(hit, "name", prefix + ".foo.bar");
         assertKey(hit, "value", 1234);
         assertKey(hit, "host", "localhost");
+    }
+
+    @Test
+    public void testGauagesOfDifferentTypes() throws Exception {
+        registry.register(name("foo", "bar"), new Gauge<Double>() {
+            @Override
+            public Double getValue() {
+                return 17.3;
+            }
+        });
+        registry.register("jvm.attribute.vendor", new Gauge<String>() {
+            @Override
+            public String getValue() {
+                return "Oracle Corporation Java HotSpot(TM) 64-Bit Server VM 25.51-b03 (1.8)";
+            }
+        });
+        reportAndRefresh();
+
+        SearchResponse searchResponse = client().prepareSearch(indexWithDate).setTypes("gauge").execute().actionGet();
+        assertThat(searchResponse.getHits().totalHits(), is(2l));
     }
 
     @Test
